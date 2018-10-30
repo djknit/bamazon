@@ -1,0 +1,25 @@
+{
+  "name": "bamazon",
+  "version": "1.0.0",
+  "description": "A CLI Node app for processing orders and managing inventory for an online retailer.",
+  "main": "bamazonCustomer.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/djknit/bamazon.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/djknit/bamazon/issues"
+  },
+  "homepage": "https://github.com/djknit/bamazon#readme",
+  "dependencies": {
+    "columnify": "^1.5.4",
+    "inquirer": "^6.2.0",
+    "mysql": "^2.16.0"
+  }
+}
