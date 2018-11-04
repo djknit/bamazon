@@ -19,7 +19,9 @@
   "homepage": "https://github.com/djknit/bamazon#readme",
   "dependencies": {
     "columnify": "^1.5.4",
+    "dotenv": "^6.1.0",
     "inquirer": "^6.2.0",
+    "moment": "^2.22.2",
     "mysql": "^2.16.0"
   }
 }
