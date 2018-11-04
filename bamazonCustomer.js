@@ -18,7 +18,7 @@ const connection = mysql.createConnection({
 let inventory;
 
 // Var to hold order info
-let thisOrder = {
+let wholeOrder = {
     price: (0).toFixed(2),
     customer: {
         name: null,
@@ -81,7 +81,7 @@ function askIfUserWantsToOrder() {
 function askLoginOrContinueAsGuest() {
     inquirer.prompt({
         name: "login",
-        message: "Do you want to log in or order as a guest?",
+        message: "\nDo you want to log in or order as a guest?",
         type: "list",
         choices: [{
             name: "Login or create account", value: true
@@ -115,7 +115,7 @@ function continueAsGuest() {
         name: "name",
         message: "Enter a name to identify your order."
     }).then(answer => {
-        thisOrder.customer.name = answer.name;
+        wholeOrder.customer.name = answer.name;
         placeOrder();
     });
 }
@@ -140,9 +140,9 @@ function login() {
                 loginTryAgain();
             }
             else {
-                thisOrder.customer.username = results[0].login_name;
-                thisOrder.customer.name = results[0].customer_name;
-                console.log(`\nWelcome back ${thisOrder.customer.name}!`);
+                wholeOrder.customer.username = results[0].login_name;
+                wholeOrder.customer.name = results[0].customer_name;
+                console.log(`\nWelcome back ${wholeOrder.customer.name}!`);
                 placeOrder();
             }
         });
@@ -161,7 +161,7 @@ function createAccount() {
                 loginTryAgain();
             }
             else {
-                thisOrder.customer.username = answer.username;
+                wholeOrder.customer.username = answer.username;
                 inquirer.prompt([{
                     name: "password",
                     type: "password",
@@ -170,8 +170,8 @@ function createAccount() {
                     name: "name",
                     message: "What's your name?"
                 }]).then(answers => {
-                    thisOrder.customer.password = answers.password;
-                    thisOrder.customer.name = answers.name;
+                    wholeOrder.customer.password = answers.password;
+                    wholeOrder.customer.name = answers.name;
                     saveNewCustomer();
                     console.log("Your account was created!");
                     placeOrder();
@@ -186,15 +186,16 @@ function loginTryAgain() {
         name: "continue",
         message: "What do you want to do?",
         type: "list",
-        choices: ["Login", "Create a new account", "Cancel purchase"]
-    }).then(answers => {
-        if (answers.continue === "Try again") return login();
-        return (answers.continue === "Cancel purchase") ? dontPlaceOrder() : createAccount();
+        choices: ["Login", "Create a new account", "Continue as guest", "Cancel purchase"]
+    }).then(answer => {
+        if (answer.continue === "Try again") return login();
+        if (answer.continue === "Continue as guest") return continueAsGuest();
+        return (answer.continue === "Cancel purchase") ? dontPlaceOrder() : createAccount();
     });
 }
 
 function saveNewCustomer() {
-    let customer = thisOrder.customer;
+    let customer = wholeOrder.customer;
     connection.query("INSERT INTO customers SET ?", {
         customer_name: customer.name,
         login_name: customer.username,
@@ -262,16 +263,18 @@ function reselectQuantity(item) {
     }
     inquirer.prompt({
         name: "quantity",
-        message: `How many units of "${item.product_name}" would you like to purchase (@ $${item.price.toFixed(2)}/unit)?`,
+        message: `How many units of "${item.product_name}" would you like to purchase (@ $${item.price}/unit)?`,
         type: "list",
         choices: choicesArray
-    }).then(answer => answer.quantity === "Cancel Order" ? offerDifferentProduct() : updateItemThen(item, verifyOrderQuantity, answer.quantity))
+    }).then(answer => answer.quantity === "Cancel Order" ? offerDifferentProduct() : updateItemThen(item, verifyOrderQuantity, parseInt(answer.quantity)));
 }
 
 function completeOrder(item, orderQuantity) {
-    console.log(`\nOrdering ${orderQuantity} units of "${item.product_name}"...`);
-    item.stock_quantity = item.stock_quantity - orderQuantity;
-    const orderPrice = (orderQuantity * item.price).toFixed(2);
+    const itemName = item.product_name;
+    const itemPrice = item.price;
+    console.log(`\nOrdering ${orderQuantity} units of "${itemName}"...`);
+    item.stock_quantity -= orderQuantity;
+    const orderPrice = (orderQuantity * itemPrice).toFixed(2);
     connection.query("UPDATE products SET ? WHERE ?", [
         {
             stock_quantity: item.stock_quantity
@@ -280,10 +283,44 @@ function completeOrder(item, orderQuantity) {
         }
     ], function (error) {
         if (error) return console.error("Oops, something went wrong...\n" + error);
-        console.log(`\nYour order is complete:\n  ${orderQuantity} units of "${item.product_name}"`);
-        console.log(`    @ $ ${item.price}/unit\n  Total cost: $ ${orderPrice}`);
-        console.log(`  ${moment().format("MM-DD-YY, hh:MM a")}`);
+        const orderTime = moment().format("MM-DD-YY, hh:MM a");
+        console.log(orderInfoString(orderTime, orderQuantity, itemName, itemPrice, orderPrice));
+        const isOrderAlreadyStarted = wholeOrder.items.length > 0 ? true : false;
+        wholeOrder.price += orderPrice;
+        wholeOrder.items.push({
+            name: itemName,
+            unitPrice: itemPrice,
+            quantity: orderQuantity,
+            time: orderTime
+        });
+        if (!isOrderAlreadyStarted) addOrderToDatabase();
+        else updateOrderInDatabase();
+        inquirer.prompt({
+            message: "\nPress 'Enter' to continue...",
+            name: "continue"
+        }).then(askWhatNext);
     });
+}
+
+function addOrderToDatabase() {
+    connection.query("INSERT INTO orders SET ?", , (error, results) => {}
+    );
+}
+
+function orderInfoString(time, quantity, productName, productUnitPrice, orderPrice) {
+    const headAndFoot = "_ ".repeat(40) + "\n";
+    return (headAndFoot + "\n ITEM SUCCESSFULLY ORDERED" + " ".repeat(31) +
+`[ ${time} ]
+
+   ${quantity} units of "${productName}"  @ $${productUnitPrice}/unit
+  -------
+  $ ${orderPrice}
+  -------
+` + headAndFoot);
+}
+
+function askWhatNext() {
+    // if ()
 }
 
 function offerDifferentProduct() {

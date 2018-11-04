@@ -42,3 +42,9 @@ CREATE TABLE customers(
     email VARCHAR(30),
     PRIMARY KEY(customer_id)
 );
+
+CREATE TABLE departments(
+    department_id INT AUTO_INCREMENT NOT NULL,
+    department_name VARCHAR(30) NOT NULL,
+    
+)
