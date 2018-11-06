@@ -9,7 +9,7 @@
 * [Developer](#-developer)
 
 ## Demo Videos
-For a brief demonstration of the app, see [this video](https://www.youtube.com/watch?v=GGi05Dj_tzY) (52 seconds).
+For a brief demonstration of the app, see [this video](https://youtu.be/hi23yLP3dpI) (52 seconds).
 
 ## Project Goals
 * Create a command line Node app that can take orders and manage inventory for an online retailer.
