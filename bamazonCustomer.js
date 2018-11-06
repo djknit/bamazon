@@ -10,6 +10,10 @@ const moment = require("moment");
 let inventory, user;
 let ordersFromThisSession = [];
 
+const BAMAZON = chalk.bgBlue.yellow("Bamazon");
+
+console.log(chalk.bgBlue(" " + BAMAZON + " ".repeat(72)));
+
 // Configure the connection to the MySQL server and database using the 'mysql' module
 const connection = mysql.createConnection({
     port: 3306,
@@ -147,6 +151,25 @@ function createAccount() {
 }
 
 function thanksBye() {
+    if (ordersFromThisSession.length > 0) return getOrdersThen((orders) => {
+        const totalOwed = orders.reduce((sum, order) => {
+            if (order.Paid === "Not Paid") return (parseFloat(sum) + parseFloat(order.Total)).toFixed(2);
+            return sum;
+        }, 0);
+        const sessionOrders = filterOrdersBy("Orders from this session", orders);
+        const sessionTotal = sessionOrders.reduce((sum, order) => (parseFloat(sum) + parseFloat(order.Total)).toFixed(2), 0);
+        const owedPreviously = (parseFloat(totalOwed) - parseFloat(sessionTotal)).toFixed(2);
+        console.log("\nThanks for choosing " + BAMAZON + ".\nHere is a summary of your order(s) from this session.");
+        console.log(chalk.bgYellow.blue("~".repeat(80)));
+        displayOrders(sessionOrders);
+        console.log("\n" + chalk.underline("SESSION TOTAL:") + chalk.bold.green(" $ " + sessionTotal));
+        if (parseFloat(owedPreviously) > 0) {
+            console.log("\nYou have previous unpaid orders totaling $" + owedPreviously);
+            console.log(chalk.yellow("\nYou now owe a total of " + chalk.bold("$ " + totalOwed)));
+        }
+        console.log("\n" + chalk.bgYellow.blue("~".repeat(80)));
+        connection.end()
+    });
     console.log(chalk.magenta("\nThank you! Goodbye."));
     connection.end();
 }
@@ -164,8 +187,6 @@ function loginTryAgain() {
         thanksBye();
     });
 }
-
-const BAMAZON = chalk.bgBlue.yellow("Bamazon");
 
 function userSetPassword() {
     inquirer.prompt([{
@@ -340,8 +361,8 @@ function pressEnterToContinue() {
 }
 
 function orderInfoString(time, quantity, productName, productUnitPrice, orderPrice, orderId) {
-    const headAndFoot = chalk.yellow.underline.bgBlue("_ ".repeat(40)) + "\n";
-    return chalk.yellow(headAndFoot + "\n  ORDER COMPLETE" + " ".repeat(42) +
+    const headAndFoot = chalk.yellow.underline.strikethrough("_ ".repeat(40)) + "\n";
+    return chalk.yellow(headAndFoot + chalk.bold("\n  ORDER COMPLETE") + " ".repeat(42) +
 ` ${time}
 
    ${quantity} units of "${productName}"  @ $${productUnitPrice}/unit
@@ -359,10 +380,13 @@ function viewOrders() {
         message: chalk.green("Which orders do you want to see?"),
         type: "list",
         choices: ["All orders", "Orders from this session", "Unpaid orders", "Orders that haven't shipped yet", "Cancel"]
-    }).then(answer => answer.choice === "Cancel" ? mainMenu() : getOrders(answer.choice));
+    }).then(answer => answer.choice === "Cancel" ? mainMenu() : getOrdersThen((orders) => {
+        displayOrders(filterOrdersBy(answer.choice, orders));
+        pressEnterToContinue();
+    }));
 }
 
-function getOrders(filter) {
+function getOrdersThen(callback) {
     connection.query("SELECT * FROM orders WHERE ?",
         { customer_id: user.userId },
         (error, results) => {
@@ -380,13 +404,13 @@ function getOrders(filter) {
                     Shipped: order.shipped === "0" ? "Not Shipped" : order.shipped
                 });
             });
-            displayOrders(filterOrdersBy(filter, orders));
-            pressEnterToContinue();
+            callback(orders);
         }
     );
 }
 
 function displayOrders(orders) {
+    if (orders.length < 1) return console.log("\nThere are no orders that match that criteria.\n")
     console.log("\n" + columnify(orders, {
         // Specify 'columnify' package options.
         columnSplitter: " | ",
