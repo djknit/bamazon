@@ -1,4 +1,4 @@
-INSERT INTO products (product_name, department_name, price, stock_quantity)
+INSERT INTO products (product_name, department_name, price, available_quantity)
 VALUES ("Toasted Oats Cereal (22 oz)", "Grocery", 2, 10),
 ("80% Cacao Chocolate Bar (12 oz)", "Grocery", 1.89, 10),
 ("Liquid Dish Soap (19.2 oz)", "Cleaning", 1.29, 30),

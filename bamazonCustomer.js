@@ -6,6 +6,10 @@ const chalk = require("chalk");
 const dotenv = require("dotenv").config();
 const moment = require("moment");
 
+// Global variables
+let inventory, user;
+let ordersFromThisSession = [];
+
 // Configure the connection to the MySQL server and database using the 'mysql' module
 const connection = mysql.createConnection({
     port: 3306,
@@ -14,315 +18,396 @@ const connection = mysql.createConnection({
     database: "bamazon"
 });
 
-// Variable to hold inventory once it is retrieved from the database
-let inventory;
-
-// Var to hold order info
-let wholeOrder = {
-    price: (0).toFixed(2),
-    customer: {
-        name: null,
-        id: null,
-        password: null,
-        username: null
-    },
-    items: []
-}
-
 // Connect to the MySQL server and database.
-connection.connect(function(error) {
+connection.connect(error => {
     // If there was an error, print the error and stop the process.
     if (error) return console.error(error);
     // Otherwise...
     getInventoryThen(() => {
         displayInventory();
-        askIfUserWantsToOrder();
+        console.log("You'll need to log in if you want to place an order.\n");
+        userSelectFirstAction();
     });
 });
 
-// Function to retrieve the current inventory from the database
 function getInventoryThen(callback) {
     // Query database (using 'mysql' module) for current inventory.
-    connection.query("SELECT * FROM products", function(error, results) {
+    connection.query("SELECT item_id, product_name, department_name, price, available_quantity FROM products", (error, results) => {
         if (error) return console.error(error);
-        // If no error...
-        // Format prices
-        results.forEach((product) => product.price = product.price.toFixed(2));
-        // Store inventory in global variable.     
-        inventory = results;
-        if (callback) callback();
+        inventory = [];
+        results.forEach(value => {
+            inventory.push({
+                "Item ID": value.item_id,
+                "Product Name": value.product_name,
+                Price: value.price.toFixed(2),
+                Available: value.available_quantity,
+                Department: value.department_name
+            });
+        });
+        callback();
     });
 }
 
-// Function to display current inventory
 function displayInventory() {
+    // Create copy of inventory array with property values of unavailable items grayed out with 'chalk'.
+    let grayedInventory = inventory.map(item => {
+        let result = {};
+        if (item.Available < 1) {
+            for (let key in item) {
+                result[key] = chalk.gray(item[key]);
+            }
+        }
+        else {
+            for (let key in item) {
+                result[key] = item[key];
+            }
+        }
+        return result;
+    });
     // Print inventory to console.
-    console.log("\nCurrent Inventory:\n\n" + columnify(inventory, {
+    console.log((chalk.bold("\nCurrent Inventory:\n\n") + columnify(grayedInventory, {
         // Specify 'columnify' package options.
         columnSplitter: " | ",
         // This option orders the columns.
-        columns: ["item_id", "product_name", "price", "stock_quantity", "department_name"],
+        columns: ["Item ID", "Product Name", "Price", "Available", "Department"],
         // Align numeric data to the right for consistent decimal alignment
         config: {
-            price: { align: "right" },
-            stock_quantity: { align: "right" }
+            "Item ID": { headingTransform: inventoryHeadingTransform },
+            "Product Name": { headingTransform: inventoryHeadingTransform },
+            Price: { align: "right", headingTransform: inventoryHeadingTransform },
+            Available: { align: "right", headingTransform: inventoryHeadingTransform },
+            Department: { headingTransform: inventoryHeadingTransform }
         }
-    }) + "\n");
+    }) + "\n"));
 }
 
-function askIfUserWantsToOrder() {
+function userSelectFirstAction() {
     inquirer.prompt({
-        name: "placeOrder",
-        message: "Would you like to place an order?",
-        type: "confirm"
-    }).then(answer => answer.placeOrder ? askLoginOrContinueAsGuest() : dontPlaceOrder());
-}
-
-function askLoginOrContinueAsGuest() {
-    inquirer.prompt({
-        name: "login",
-        message: "\nDo you want to log in or order as a guest?",
+        name: "action",
+        message: chalk.green("What would you like to do?"),
         type: "list",
-        choices: [{
-            name: "Login or create account", value: true
-        },{
-            name: "Continue as guest", value: false
-        }]
-    }).then(answer => answer.login ? loginOrCreateAccount() : continueAsGuest());
-}
-
-// Function to run if customer declines to place an order
-function dontPlaceOrder() {
-    console.log("\nThanks anyways.");
-    connection.end((error) => {if (error) console.error(error)});
-}
-
-function loginOrCreateAccount() {
-    inquirer.prompt({
-        name: "hasAccount",
-        message: "Do you want to use an existing account or create a new one?",
-        type: "list",
-        choices: [{
-            name: "Login with existing account", value: true
-        },{
-            name: "Create a new account", value: false
-        }]
-    }).then(answer => answer.hasAccount ? login() : createAccount());
-}
-
-function continueAsGuest() {
-    inquirer.prompt({
-        name: "name",
-        message: "Enter a name to identify your order."
+        choices: ["Sign in", "Create a new account", "Exit"]
     }).then(answer => {
-        wholeOrder.customer.name = answer.name;
-        placeOrder();
+        if (answer.action === "Sign in") return login();
+        if (answer.action == "Create a new account") return createAccount();
+        thanksBye();
     });
+}
+
+function inventoryHeadingTransform(heading) {
+    return chalk.underline(heading);
 }
 
 function login() {
+    console.log("");
     inquirer.prompt([{
         name: "username",
-        message: "Enter your user name:"
+        message: chalk.green("Enter your user name:")
     },{
         name: "password",
         type: "password",
-        message: "Enter your password"
+        message: chalk.green("Enter your password")
     }]).then(answers => {
-        connection.query("SELECT * FROM customers WHERE login_name = ? AND login_password = ?", [answers.username, answers.password], (error, results) => {
-            if (error) {
-                console.error("There was an error checking the database.");
-                console.error(error);
-                loginTryAgain();
-            }
-            else if(results.length < 1) {
-                console.log("Sorry that user name and password don't match our records.");
+        connection.query("SELECT * FROM customers WHERE username = ? AND user_password = ?", [answers.username, answers.password], (error, results) => {
+            if (error) return console.error(error);
+            if (results.length < 1) {
+                console.log(chalk.red("Sorry that user name and password don't match our records."));
                 loginTryAgain();
             }
             else {
-                wholeOrder.customer.username = results[0].login_name;
-                wholeOrder.customer.name = results[0].customer_name;
-                console.log(`\nWelcome back ${wholeOrder.customer.name}!`);
-                placeOrder();
+                user = {
+                    username: results[0].username,
+                    userId: results[0].customer_id
+                };
+                console.log(chalk.magenta("\nWelcome back " + chalk.bold(user.username) + "!"));
+                mainMenu();
             }
         });
-    })
+    });
 }
 
 function createAccount() {
+    console.log("");
     inquirer.prompt({
         name: "username",
-        message: "Create you user name:"
-    }).then(answer => {
-        connection.query("SELECT * FROM customers WHERE login_name = ?", answer.username, (error, results) => {
+        message: chalk.green("Enter user name:")
+    }).then((answer) => {
+        connection.query("SELECT * FROM customers WHERE username = ?", answer.username, (error, results) => {
             if (error) return console.error(error);
             if (results.length > 0) {
-                console.log("Sorry, that user name is already taken.");
+                console.log(chalk.red("Sorry, that user name is already taken."));
                 loginTryAgain();
             }
             else {
-                wholeOrder.customer.username = answer.username;
-                inquirer.prompt([{
-                    name: "password",
-                    type: "password",
-                    message: "Enter your password."
-                },{
-                    name: "name",
-                    message: "What's your name?"
-                }]).then(answers => {
-                    wholeOrder.customer.password = answers.password;
-                    wholeOrder.customer.name = answers.name;
-                    saveNewCustomer();
-                    console.log("Your account was created!");
-                    placeOrder();
-                });
+                user = { username: answer.username };
+                userSetPassword();
             }
         });
-    })
+    });
+}
+
+function thanksBye() {
+    console.log(chalk.magenta("\nThank you! Goodbye."));
+    connection.end();
 }
 
 function loginTryAgain() {
+    console.log("");
     inquirer.prompt({
         name: "continue",
-        message: "What do you want to do?",
+        message: chalk.green("What would you like to do?"),
         type: "list",
-        choices: ["Login", "Create a new account", "Continue as guest", "Cancel purchase"]
+        choices: ["Sign in with existing account", "Create a new account", "Exit"]
     }).then(answer => {
-        if (answer.continue === "Try again") return login();
-        if (answer.continue === "Continue as guest") return continueAsGuest();
-        return (answer.continue === "Cancel purchase") ? dontPlaceOrder() : createAccount();
+        if (answer.continue === "Sign in with existing account") return login();
+        if (answer.continue === "Create a new account") return createAccount();
+        thanksBye();
     });
 }
 
-function saveNewCustomer() {
-    let customer = wholeOrder.customer;
-    connection.query("INSERT INTO customers SET ?", {
-        customer_name: customer.name,
-        login_name: customer.username,
-        login_password: customer.password
+const BAMAZON = chalk.bgBlue.yellow("Bamazon");
+
+function userSetPassword() {
+    inquirer.prompt([{
+        name: "password",
+        type: "password",
+        message: chalk.green("Enter password:")
+    },{
+        name: "confirm",
+        type: "password",
+        message: chalk.green("Confirm password:")
+    }]).then(answers => {
+        if (answers.password !== answers.confirm) {
+            console.log(chalk.red("The passwords you entered didn't match.") + "\nPlease try again.");
+            userSetPassword();
+        }
+        else {
+            connection.query("INSERT INTO customers SET ?",
+                {
+                    username: user.username,
+                    user_password: answers.password
+                },
+                (error, results) => {
+                    if (error) return console.error(error);
+                    console.log(chalk.magenta(`\nWelcome to ${BAMAZON}, ` + chalk.bold(user.username) + "!"));
+                    user.userId = results.insertId;
+                    mainMenu();
+                }
+            );
+        }
     });
 }
 
-// Function to take customer order
+// MAIN MENU
+function mainMenu() {
+    console.log("");
+    console.log(chalk.gray.underline(" MAIN MENU  "))
+    inquirer.prompt({
+        name: "action",
+        message: chalk.green("What would you like to do?"),
+        type: "list",
+        choices: ["Place an order", "View order history", "View inventory", "Exit"]
+    }).then(answer => {
+        if (answer.action === "Place an order") return placeOrder();
+        if (answer.action === "View order history") return viewOrders();
+        if (answer.action === "View inventory") return getInventoryThen(() => {
+            displayInventory();
+            mainMenu();
+        })
+        thanksBye();
+    });
+}
+
+// PLACE ORDER
 function placeOrder() {
     console.log("");
     inquirer.prompt([{
         name: "item",
-        message: "Select the item you wish to order.",
+        message: chalk.green("Select the item you wish to order."),
         type: "list",
         choices: inventory.map(item => ({
-            name: `${item.item_id} -- ${item.product_name}`,
+            name: `${item["Item ID"]} -- ${item["Product Name"]}`,
             value: item
         }))
     }, {
         name: "quantity",
-        message: "How many units would you like?",
+        message: chalk.green("How many units would you like?"),
         validate: (answer) => {
-            const invalidAnswerMessage = "Quantity must be a positive whole number.";
+            const invalidAnswerMessage = chalk.red("Quantity must be a positive whole number.");
             if (isNaN(answer)) return invalidAnswerMessage;
             const numericAnswer = parseFloat(answer);
             if (!Number.isInteger(numericAnswer) || numericAnswer < 1) return invalidAnswerMessage;
             return true;
         }
-    }]).then((answers) => {
-        let chosenItem = answers.item;
-        const orderQuantity = parseInt(answers.quantity);
-        updateItemThen(chosenItem, verifyOrderQuantity, orderQuantity);
-    });
+    }]).then((answers) => updateItemThen(verifyOrderQuantity, answers.item, answers.quantity));
 }
 
-function updateItemThen(item, callback, callbackParam2) {
-    // Grab updated item info from database
-    connection.query("SELECT * FROM products WHERE ?", { item_id: item.item_id }, function(error, results) {
-        if (error) return console.error(error);
-        const updatedItem = results[0];
-        updatedItem.price = updatedItem.price.toFixed(2);
-        return callbackParam2 ? callback(updatedItem, callbackParam2) : callback(updatedItem);
-    });
+function updateItemThen(callback, item, quantity) {
+    connection.query("SELECT * FROM products WHERE ?",
+        { item_id: item["Item ID"] },
+        function(error, results) {
+            if (error) return console.error(error);
+            const oldPrice = item.Price;
+            item.Price = results[0].price.toFixed(2);
+            item.Available = results[0].available_quantity;
+            item.holdQuantity = results[0].hold_quantity;
+            // Alert the user if the price has changed and ask if they want to continue
+            if (item.Price !== oldPrice) {
+                console.log(chalk.yellow("\nThe sale price of the product you are trying to purchase has changed."));
+                console.log(chalk.yellow(`The price is now $${chalk.bold(item.Price)} per unit.`))
+                console.log(BAMAZON + " apologizes for any inconvenience this may have caused.");
+                const question = "Do you want to continue with your purchase";
+                question += quantity ? ` of ${quantity} units of ${item["Product Name"]} for $${(quantity * item.Price).toFixed(2)}?` : "?";
+                inquirer.prompt({
+                    name: "continue",
+                    type: "confirm",
+                    message: chalk.green(question)
+                }).then(answer => answer.continue ? callback(item, quantity) : mainMenu());
+            }
+            else callback(item, quantity);
+        }
+    );
 }
 
-// Function to check DB to see if there is enough of item to complete order and continue accordingly
-function verifyOrderQuantity(item, orderQuantity) {
-    const stockQuantity = item.stock_quantity;
-    return (orderQuantity > stockQuantity) ? insufficientQuantity(item) : completeOrder(item, orderQuantity);
+function verifyOrderQuantity(item, quantity, hasPriceChanged) {
+    return (quantity > item.Available) ? insufficientQuantity(item) : completeOrder(item, quantity);
 }
+
 
 function insufficientQuantity(item) {
-    console.log(`Sorry, we only have ${item.stock_quantity} units in stock currently.`);
+    console.log(chalk.red(`Sorry, we only have ${item.Available} units in stock currently.\n`));
     inquirer.prompt({
         name: "continue",
-        message: "Would you like to order a different amount?",
+        message: chalk.green("Would you like to order a different amount?"),
         type: "confirm"
-    }).then(answer => answer.continue ? updateItemThen(item, reselectQuantity) : offerDifferentProduct());
+    }).then(answer => answer.continue ? updateItemThen(reselectQuantity, item) : mainMenu());
 }
 
 function reselectQuantity(item) {
     let choicesArray = ["Cancel Order"];
-    for (i = 1; i < item.stock_quantity + 1; i++) {
+    for (i = 1; i < item.Available + 1; i++) {
         choicesArray.push(i.toString());
     }
     inquirer.prompt({
         name: "quantity",
-        message: `How many units of "${item.product_name}" would you like to purchase (@ $${item.price}/unit)?`,
+        message: chalk.green(`How many units of "${item["Product Name"]}" would you like to purchase?\n    (@ $${item.Price}/unit)`),
         type: "list",
         choices: choicesArray
-    }).then(answer => answer.quantity === "Cancel Order" ? offerDifferentProduct() : updateItemThen(item, verifyOrderQuantity, parseInt(answer.quantity)));
+    }).then(answer => answer.quantity === "Cancel Order" ? mainMenu() : updateItemThen(verifyOrderQuantity, item, parseInt(answer.quantity)));
 }
 
 function completeOrder(item, orderQuantity) {
-    const itemName = item.product_name;
-    const itemPrice = item.price;
-    console.log(`\nOrdering ${orderQuantity} units of "${itemName}"...`);
-    item.stock_quantity -= orderQuantity;
+    console.log("");
+    const itemName = item["Product Name"];
+    const itemPrice = item.Price;
+    // console.log(`\nOrdering ${orderQuantity} units of "${itemName}"...`);
+    item.Available -= orderQuantity;
+    item.holdQuantity = parseInt(item.holdQuantity) + orderQuantity;
     const orderPrice = (orderQuantity * itemPrice).toFixed(2);
     connection.query("UPDATE products SET ? WHERE ?", [
         {
-            stock_quantity: item.stock_quantity
+            available_quantity: item.Available,
+            hold_quantity: item.holdQuantity
         },{
-            item_id: item.item_id
+            item_id: item["Item ID"]
         }
     ], function (error) {
-        if (error) return console.error("Oops, something went wrong...\n" + error);
-        const orderTime = moment().format("MM-DD-YY, hh:MM a");
-        console.log(orderInfoString(orderTime, orderQuantity, itemName, itemPrice, orderPrice));
-        const isOrderAlreadyStarted = wholeOrder.items.length > 0 ? true : false;
-        wholeOrder.price += orderPrice;
-        wholeOrder.items.push({
-            name: itemName,
-            unitPrice: itemPrice,
-            quantity: orderQuantity,
-            time: orderTime
-        });
-        if (!isOrderAlreadyStarted) addOrderToDatabase();
-        else updateOrderInDatabase();
-        inquirer.prompt({
-            message: "\nPress 'Enter' to continue...",
-            name: "continue"
-        }).then(askWhatNext);
+        if (error) return console.error(error);
+        const orderTime = moment().format("MM-DD-YY, hh:mm a");
+        connection.query("INSERT INTO orders SET ?",
+            {
+                item_id: item["Item ID"],
+                customer_id: user.userId,
+                quantity: orderQuantity,
+                order_price: orderPrice,
+                order_time: orderTime
+            },
+            (error, results) => {
+                if (error) return console.error(error);
+                ordersFromThisSession.push(results.insertId);
+                console.log(orderInfoString(orderTime, orderQuantity, itemName, itemPrice, orderPrice, results.insertId));
+                pressEnterToContinue();
+            }
+        );
     });
 }
 
-function addOrderToDatabase() {
-    connection.query("INSERT INTO orders SET ?", , (error, results) => {}
-    );
+function pressEnterToContinue() {
+    inquirer.prompt({
+        message: chalk.green("Press 'Enter' to continue..."),
+        name: "continue"
+    }).then(() => mainMenu());
 }
 
-function orderInfoString(time, quantity, productName, productUnitPrice, orderPrice) {
-    const headAndFoot = "_ ".repeat(40) + "\n";
-    return (headAndFoot + "\n ITEM SUCCESSFULLY ORDERED" + " ".repeat(31) +
-`[ ${time} ]
+function orderInfoString(time, quantity, productName, productUnitPrice, orderPrice, orderId) {
+    const headAndFoot = chalk.yellow.underline.bgBlue("_ ".repeat(40)) + "\n";
+    return chalk.yellow(headAndFoot + "\n  ORDER COMPLETE" + " ".repeat(42) +
+` ${time}
 
    ${quantity} units of "${productName}"  @ $${productUnitPrice}/unit
   -------
-  $ ${orderPrice}
+  $ ${chalk.bold(orderPrice)}` + " ".repeat(50) + `[Order ID = ${orderId}]
   -------
-` + headAndFoot);
+` + headAndFoot + "\n");
 }
 
-function askWhatNext() {
-    // if ()
+// VIEW ORDERS
+function viewOrders() {
+    console.log("");
+    inquirer.prompt({
+        name: "choice",
+        message: chalk.green("Which orders do you want to see?"),
+        type: "list",
+        choices: ["All orders", "Orders from this session", "Unpaid orders", "Orders that haven't shipped yet", "Cancel"]
+    }).then(answer => answer.choice === "Cancel" ? mainMenu() : getOrders(answer.choice));
 }
 
-function offerDifferentProduct() {
-    console.log("offer diff. prod. ...");
+function getOrders(filter) {
+    connection.query("SELECT * FROM orders WHERE ?",
+        { customer_id: user.userId },
+        (error, results) => {
+            if (error) return console.error(error);
+            let orders = [];
+            results.forEach(order => {
+                const product = inventory.filter(product => product["Item ID"] === order.item_id)[0];
+                orders.push({
+                    "Order ID": order.order_id,
+                    Product: product["Product Name"],
+                    Quantity: order.quantity,
+                    Total: order.order_price.toFixed(2),
+                    "Time Ordered": order.order_time,
+                    Paid: order.paid === "0" ? "Not Paid" : order.paid,
+                    Shipped: order.shipped === "0" ? "Not Shipped" : order.shipped
+                });
+            });
+            displayOrders(filterOrdersBy(filter, orders));
+            pressEnterToContinue();
+        }
+    );
+}
+
+function displayOrders(orders) {
+    console.log("\n" + columnify(orders, {
+        // Specify 'columnify' package options.
+        columnSplitter: " | ",
+        // This option orders the columns.
+        columns: ["Order ID", "Product", "Quantity", "Total", "Time Ordered", "Paid", "Shipped"],
+        // Align numeric data to the right for consistent decimal alignment
+        config: {
+            "Order ID": { headingTransform: inventoryHeadingTransform },
+            Product: { headingTransform: inventoryHeadingTransform },
+            Quantity: { align: "right", headingTransform: inventoryHeadingTransform },
+            Total: { align: "right", headingTransform: inventoryHeadingTransform },
+            "Time Ordered": { headingTransform: inventoryHeadingTransform },
+            Paid: { headingTransform: inventoryHeadingTransform },
+            Shipped: { headingTransform: inventoryHeadingTransform }
+        }
+    }) + "\n");
+}
+
+function filterOrdersBy(filter, orders) {
+    if (filter === "All orders") return orders;
+    if (filter === "Orders from this session") return orders.filter(order => ordersFromThisSession.indexOf(order["Order ID"]) > -1);
+    if (filter === "Unpaid orders") return orders.filter(order => order.Paid === "Not Paid");
+    return orders.filter(order => order.Shipped === "Not Shipped");
 }
