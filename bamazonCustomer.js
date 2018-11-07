@@ -6,6 +6,8 @@ const chalk = require("chalk");
 const dotenv = require("dotenv").config();
 const moment = require("moment");
 
+const userAuthentication = require("./userAuthentication")
+
 // Global variables
 let inventory, user;
 let ordersFromThisSession = [];
@@ -30,7 +32,7 @@ connection.connect(error => {
     getInventoryThen(() => {
         displayInventory();
         console.log("You'll need to log in if you want to place an order.\n");
-        userSelectFirstAction();
+        userAuthentication.loginMenu(connection, "customers", begin, thanksBye);
     });
 });
 
@@ -85,69 +87,8 @@ function displayInventory() {
     }) + "\n"));
 }
 
-function userSelectFirstAction() {
-    inquirer.prompt({
-        name: "action",
-        message: chalk.green("What would you like to do?"),
-        type: "list",
-        choices: ["Sign in", "Create a new account", "Exit"]
-    }).then(answer => {
-        if (answer.action === "Sign in") return login();
-        if (answer.action == "Create a new account") return createAccount();
-        thanksBye();
-    });
-}
-
 function inventoryHeadingTransform(heading) {
     return chalk.underline(heading);
-}
-
-function login() {
-    console.log("");
-    inquirer.prompt([{
-        name: "username",
-        message: chalk.green("Enter your user name:")
-    },{
-        name: "password",
-        type: "password",
-        message: chalk.green("Enter your password")
-    }]).then(answers => {
-        connection.query("SELECT * FROM customers WHERE username = ? AND user_password = ?", [answers.username, answers.password], (error, results) => {
-            if (error) return console.error(error);
-            if (results.length < 1) {
-                console.log(chalk.red("Sorry that user name and password don't match our records."));
-                loginTryAgain();
-            }
-            else {
-                user = {
-                    username: results[0].username,
-                    userId: results[0].customer_id
-                };
-                console.log(chalk.magenta("\nWelcome back " + chalk.bold(user.username) + "!"));
-                mainMenu();
-            }
-        });
-    });
-}
-
-function createAccount() {
-    console.log("");
-    inquirer.prompt({
-        name: "username",
-        message: chalk.green("Enter user name:")
-    }).then((answer) => {
-        connection.query("SELECT * FROM customers WHERE username = ?", answer.username, (error, results) => {
-            if (error) return console.error(error);
-            if (results.length > 0) {
-                console.log(chalk.red("Sorry, that user name is already taken."));
-                loginTryAgain();
-            }
-            else {
-                user = { username: answer.username };
-                userSetPassword();
-            }
-        });
-    });
 }
 
 function thanksBye() {
@@ -174,49 +115,9 @@ function thanksBye() {
     connection.end();
 }
 
-function loginTryAgain() {
-    console.log("");
-    inquirer.prompt({
-        name: "continue",
-        message: chalk.green("What would you like to do?"),
-        type: "list",
-        choices: ["Sign in with existing account", "Create a new account", "Exit"]
-    }).then(answer => {
-        if (answer.continue === "Sign in with existing account") return login();
-        if (answer.continue === "Create a new account") return createAccount();
-        thanksBye();
-    });
-}
-
-function userSetPassword() {
-    inquirer.prompt([{
-        name: "password",
-        type: "password",
-        message: chalk.green("Enter password:")
-    },{
-        name: "confirm",
-        type: "password",
-        message: chalk.green("Confirm password:")
-    }]).then(answers => {
-        if (answers.password !== answers.confirm) {
-            console.log(chalk.red("The passwords you entered didn't match.") + "\nPlease try again.");
-            userSetPassword();
-        }
-        else {
-            connection.query("INSERT INTO customers SET ?",
-                {
-                    username: user.username,
-                    user_password: answers.password
-                },
-                (error, results) => {
-                    if (error) return console.error(error);
-                    console.log(chalk.magenta(`\nWelcome to ${BAMAZON}, ` + chalk.bold(user.username) + "!"));
-                    user.userId = results.insertId;
-                    mainMenu();
-                }
-            );
-        }
-    });
+function begin(user0) {
+    user = user0;
+    return mainMenu();
 }
 
 // MAIN MENU

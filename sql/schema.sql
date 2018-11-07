@@ -23,6 +23,13 @@ CREATE TABLE customers(
     PRIMARY KEY(customer_id)
 );
 
+CREATE TABLE managers(
+    manager_id INT AUTO_INCREMENT NOT NULL,
+    username VARCHAR(16) NOT NULL,
+    user_password VARCHAR(19) NOT NULL,
+    PRIMARY KEY(manager_id)
+);
+
 CREATE TABLE orders(
     order_id INT AUTO_INCREMENT NOT NULL,
     customer_id INT NOT NULL,
