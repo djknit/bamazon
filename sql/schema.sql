@@ -9,12 +9,11 @@ CREATE TABLE products(
     product_name VARCHAR(45) NOT NULL,
     department_id INT NOT NULL,
     price DECIMAL(10,2) NOT NULL,
+    cost DECIMAL(10,2),
     available_quantity INT NOT NULL,
     hold_quantity INT DEFAULT 0,
     reserved_quantity INT DEFAULT 0,
     shipped_quantity INT DEFAULT 0,
-    cost DECIMAL(10,2),
-    first_purchase VARCHAR(20),
     PRIMARY KEY(item_id)
 );
 
@@ -74,7 +73,7 @@ CREATE TABLE price_changes(
     PRIMARY KEY(change_id)
 );
 
- CREATE TABLE departments(
+CREATE TABLE departments(
     department_id INT AUTO_INCREMENT NOT NULL,
     department_name VARCHAR(30) NOT NULL,
     PRIMARY KEY(department_id)   

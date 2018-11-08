@@ -27,7 +27,7 @@ function login(connection, table, begin, thanksBye) {
     },{
         name: "password",
         type: "password",
-        message: chalk.green("Enter your password")
+        message: chalk.green("Enter your password:")
     }]).then(answers => {
         connection.query(`SELECT * FROM ${table} WHERE username = ? AND user_password = ?`, [answers.username, answers.password], (error, results) => {
             if (error) return console.error(error);
@@ -51,7 +51,7 @@ function createAccount(connection, table, begin, thanksBye) {
     console.log("");
     inquirer.prompt({
         name: "username",
-        message: chalk.green("Enter user name:"),
+        message: chalk.green("Enter user name (max. 16 characters):"),
         validate: answer => answer.trim() === "" ? chalk.red("Username can't be empty.") : true
     }).then((answer) => {
         connection.query(`SELECT * FROM ${table} WHERE username = ?`, answer.username, (error, results) => {
@@ -85,7 +85,7 @@ function userSetPassword(username, connection, table, begin) {
     inquirer.prompt([{
         name: "password",
         type: "password",
-        message: chalk.green("Enter password:")
+        message: chalk.green("Enter password (max. 19 characters):")
     },{
         name: "confirm",
         type: "password",

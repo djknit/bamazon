@@ -34,27 +34,16 @@ connection.connect(error => {
     // If there was an error, print the error and stop the process.
     if (error) return console.error(error);
     // Otherwise...
-    getDepartmentsThen(() => getInventoryThen(() => {
+    getInventoryThen(() => {
         displayInventory();
         console.log("You'll need to log in if you want to place an order.\n");
         userAuthentication.loginMenu(connection, "customers", begin, thanksBye);
-    }));
-});
-
-function getDepartmentsThen(callback) {
-    connection.query("SELECT * FROM departments", (error, results) => {
-        if (error) return console.error(error);
-        departments = {};
-        results.forEach(result => {
-            departments[result.department_id] = result.department_name;
-        });
-        callback();
     });
-}
+});
 
 function getInventoryThen(callback) {
     // Query database (using 'mysql' module) for current inventory.
-    connection.query("SELECT item_id, product_name, department_name, price, available_quantity FROM products", (error, results) => {
+    connection.query("SELECT item_id, product_name, department_id, price, available_quantity FROM products", (error, results) => {
         if (error) return console.error(error);
         inventory = [];
         results.forEach(result => {
@@ -67,6 +56,37 @@ function getInventoryThen(callback) {
             });
         });
         callback();
+    });
+}
+
+function getDepartmentsThen(callback) {
+    connection.query("SELECT * FROM departments", (error, results) => {
+        if (error) return console.error(error);
+        departments = {};
+        results.forEach(result => {
+            departments[result.department_id.toString()] = result.department_name;
+        });
+        callback(results);
+    });
+}
+
+function getInventoryThen(callback) {
+    getDepartmentsThen(() => {
+        // Query database (using 'mysql' module) for current inventory.
+        connection.query("SELECT item_id, product_name, department_id, price, available_quantity FROM products", (error, results) => {
+            if (error) return console.error(error);
+            inventory = [];
+            results.forEach(value => {
+                inventory.push({
+                    "Item ID": value.item_id,
+                    "Product Name": value.product_name,
+                    Price: value.price.toFixed(2),
+                    Available: value.available_quantity,
+                    Department: departments[value.department_id.toString()]
+                });
+            });
+            callback();
+        });
     });
 }
 
@@ -158,16 +178,18 @@ function mainMenu() {
 
 // PLACE ORDER
 function placeOrder() {
+    let choices = inventory.map(item => ({
+        name: `${item["Item ID"]} -- ${item["Product Name"]}`,
+        value: item
+    }));
+    choices.push({ name: "CANCEL", value: false });
     console.log("");
-    inquirer.prompt([{
+    inquirer.prompt({
         name: "item",
         message: chalk.green("Select the item you wish to order."),
         type: "list",
-        choices: inventory.map(item => ({
-            name: `${item["Item ID"]} -- ${item["Product Name"]}`,
-            value: item
-        }))
-    }, {
+        choices
+    }).then(answer1 => !answer1.item ? mainMenu() : inquirer.prompt({
         name: "quantity",
         message: chalk.green("How many units would you like?"),
         validate: (answer) => {
@@ -177,7 +199,7 @@ function placeOrder() {
             if (!Number.isInteger(numericAnswer) || numericAnswer < 1) return invalidAnswerMessage;
             return true;
         }
-    }]).then((answers) => updateItemThen(verifyOrderQuantity, answers.item, parseInt(answers.quantity)));
+    }).then(answer2 => updateItemThen(verifyOrderQuantity, answer1.item, parseInt(answer2.quantity))));
 }
 
 function updateItemThen(callback, item, quantity) {
