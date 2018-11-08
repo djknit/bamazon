@@ -74,13 +74,13 @@ function menu(title, choices) {
 // MAIN MENU
 const mainMenu = () => menu("MAIN MENU", [
     ["Manage inventory", inventoryMenu],
-    ["Manage existing orders", ordersMenu],
-    ["Create special order", createSpecialOrder]
+    ["Manage existing orders", ordersMenu] //,
+    // ["Create special order", createSpecialOrder]
 ]);
 
-function createSpecialOrder() {
+// function createSpecialOrder() {
 
-}
+// }
 
 // INVENTORY MANAGER MENU (option function are labeled with comments beginning with '>' below)
 const inventoryMenu = () => menu("Inventory Manager Menu", [
@@ -547,17 +547,83 @@ const ordersMenu = () => menu("Orders Manager Menu", [
 ]);
 
 function viewOrders() {
-
+    getOrdersThen(displayOrders);
 }
 
-function searchOrders() {
-
+function getOrdersThen(callback) {
+    getInventoryThen(() => {
+        connection.query("SELECT * FROM orders", (error, results) => {
+            if (error) return console.error(error);
+            let orders = [];
+            results.forEach(order => {
+                const product = inventory.filter(product => product["Item ID"] === order.item_id)[0];
+                orders.push({
+                    "Order ID": order.order_id,
+                    "Customer ID": order.customer_id,
+                    Product: product["Product Name"],
+                    Quantity: order.quantity,
+                    Total: order.order_price.toFixed(2),
+                    "Time Ordered": order.order_time,
+                    Paid: order.paid === "0" ? "Not Paid" : order.paid,
+                    Shipped: order.shipped === "0" ? "Not Shipped" : order.shipped,
+                    item: product
+                });
+            });
+            callback(orders);
+        });
+    });
 }
+
+function displayOrders(orders) {
+    if (orders.length < 1) return console.log("\nThere are no orders that match that criteria.\n");
+    let config = {};
+    config["Order ID"] = config["Customer ID"] = config.Product = config["Time Ordered"] = config.Paid = config.Shipped = { headingTransform: (heading) => chalk.underline(heading) };
+    config.Quantity = config.Total = { align: "right", headingTransform: (heading) => chalk.underline(heading) };
+    console.log("\n" + columnify(orders, {
+        // Specify 'columnify' package options.
+        columnSplitter: " | ",
+        // This option orders the columns.
+        columns: ["Order ID", "Product", "Quantity", "Total", "Time Ordered", "Paid", "Shipped"],
+        // Align numeric data to the right for consistent decimal alignment
+        config
+    }) + "\n");
+}
+
+// function searchOrders() {
+
+// }
 
 function enterPayments() {
-
+    getOrdersThen(orders => {
+        let choices = [];
+        orders.forEach(order => choices.push({
+            name: `Order #${order["Order ID"]}: Customer #${order["Customer ID"]}, Total = $${order.Total}, Ordered ${order["Time Ordered"]}`,
+            value: order
+        }));
+        inquirer.prompt({
+            name: "order",
+            message: chalk.green("Choose an order to mark as paid."),
+            choices
+        }).then(answer => {
+            console.log(chalk.cyan(`\nMarking Order #${answer.order} as paid.`));
+            inquirer.prompt({
+                name: "verify",
+                message: chalk.green("Finish marking order paid?"),
+                type: "confirm"
+            }).then(answer => answer.verify ? markPaid(order) : ordersMenu());
+        });
+    });
 }
 
-function enterShipments() {
+// function markPaid(order) {
+//     updateItemThen(() => {
 
-}
+//         connection.query("UPDATE products SET ? WHERE ?", [
+//             { hold_quantity: }])
+//     }, order.item, order.Quantity);
+    
+// }
+
+// function enterShipments() {
+
+// }
