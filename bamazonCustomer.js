@@ -9,12 +9,17 @@ const moment = require("moment");
 const userAuthentication = require("./userAuthentication")
 
 // Global variables
-let inventory, user;
+let inventory, user, departments;
 let ordersFromThisSession = [];
 
-const BAMAZON = chalk.bgBlue.yellow("Bamazon");
+const BAMAZON = chalk.bgBlue.yellow("BAMAZON");
 
-console.log(chalk.bgBlue(" " + BAMAZON + " ".repeat(72)));
+console.log(chalk.gray(`vvv vvv vv_v v_vv vvv vvv
+ \\\\  \\\\  \\ \\ / /  //  //
+  \\\\  \\\\  \\ v /  //  //
+   \\\\  \\\\  \\|/  //  //
+   vvv vvv vvv vvv vvv`));
+console.log(chalk.bgBlue.bold("   ~~~ " + BAMAZON + " ~~~~~~~" + " ".repeat(58)));
 
 // Configure the connection to the MySQL server and database using the 'mysql' module
 const connection = mysql.createConnection({
@@ -29,25 +34,36 @@ connection.connect(error => {
     // If there was an error, print the error and stop the process.
     if (error) return console.error(error);
     // Otherwise...
-    getInventoryThen(() => {
+    getDepartmentsThen(() => getInventoryThen(() => {
         displayInventory();
         console.log("You'll need to log in if you want to place an order.\n");
         userAuthentication.loginMenu(connection, "customers", begin, thanksBye);
-    });
+    }));
 });
+
+function getDepartmentsThen(callback) {
+    connection.query("SELECT * FROM departments", (error, results) => {
+        if (error) return console.error(error);
+        departments = {};
+        results.forEach(result => {
+            departments[result.department_id] = result.department_name;
+        });
+        callback();
+    });
+}
 
 function getInventoryThen(callback) {
     // Query database (using 'mysql' module) for current inventory.
     connection.query("SELECT item_id, product_name, department_name, price, available_quantity FROM products", (error, results) => {
         if (error) return console.error(error);
         inventory = [];
-        results.forEach(value => {
+        results.forEach(result => {
             inventory.push({
-                "Item ID": value.item_id,
-                "Product Name": value.product_name,
-                Price: value.price.toFixed(2),
-                Available: value.available_quantity,
-                Department: value.department_name
+                "Item ID": result.item_id,
+                "Product Name": result.product_name,
+                Price: result.price.toFixed(2),
+                Available: result.available_quantity,
+                Department: departments[result.department_id]
             });
         });
         callback();
@@ -100,7 +116,7 @@ function thanksBye() {
         const sessionOrders = filterOrdersBy("Orders from this session", orders);
         const sessionTotal = sessionOrders.reduce((sum, order) => (parseFloat(sum) + parseFloat(order.Total)).toFixed(2), 0);
         const owedPreviously = (parseFloat(totalOwed) - parseFloat(sessionTotal)).toFixed(2);
-        console.log("\nThanks for choosing " + BAMAZON + ".\nHere is a summary of your order(s) from this session.");
+        console.log("\nThanks for choosing " + BAMAZON + ".\n\nHere is a summary of your order(s) from this session:");
         console.log(chalk.bgYellow.blue("~".repeat(80)));
         displayOrders(sessionOrders);
         console.log("\n" + chalk.underline("SESSION TOTAL:") + chalk.bold.green(" $ " + sessionTotal));
@@ -109,7 +125,7 @@ function thanksBye() {
             console.log(chalk.yellow("\nYou now owe a total of " + chalk.bold("$ " + totalOwed)));
         }
         console.log("\n" + chalk.bgYellow.blue("~".repeat(80)));
-        connection.end()
+        connection.end();
     });
     console.log(chalk.magenta("\nThank you! Goodbye."));
     connection.end();
@@ -161,7 +177,7 @@ function placeOrder() {
             if (!Number.isInteger(numericAnswer) || numericAnswer < 1) return invalidAnswerMessage;
             return true;
         }
-    }]).then((answers) => updateItemThen(verifyOrderQuantity, answers.item, answers.quantity));
+    }]).then((answers) => updateItemThen(verifyOrderQuantity, answers.item, parseInt(answers.quantity)));
 }
 
 function updateItemThen(callback, item, quantity) {
@@ -191,7 +207,7 @@ function updateItemThen(callback, item, quantity) {
     );
 }
 
-function verifyOrderQuantity(item, quantity, hasPriceChanged) {
+function verifyOrderQuantity(item, quantity) {
     return (quantity > item.Available) ? insufficientQuantity(item) : completeOrder(item, quantity);
 }
 

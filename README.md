@@ -1,4 +1,4 @@
-# Bamazon
+# BAMAZON
 
 ### Bamazon is a CLI Node app for processing orders and managing inventory for an online retailer.
 
@@ -24,7 +24,9 @@ For a brief demonstration of the app, see [this video](https://youtu.be/hi23yLP3
 * Allows users view order history with options for filtering orders.
 
 ## Developer
-This project is developed and maintained by David Knittel. Any and all questions, comments, suggestions, or proposed contributions are welcome.
+This project is developed and maintained by David Knittel.
+
+Any and all questions, comments, suggestions, and/or proposed contributions are welcome.
 * [Email me (djknit@gmail.com)](mailto:djknit@gmail.com)
 * Visit my [webpage](https://djknit.github.io) or go directly to my [portfolio](https://djknit.github.io/portfolio.html)
 * Visit my [GitHub profile](https://github.com/djknit)

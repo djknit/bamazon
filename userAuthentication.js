@@ -104,10 +104,6 @@ function userSetPassword(username, connection, table, begin) {
                 (error, results) => {
                     if (error) return console.error(error);
                     console.log(chalk.magenta(`\nWelcome to ${BAMAZON}, ` + chalk.bold(username) + "!"));
-                    console.log({
-                        username,
-                        userId: results.insertId
-                    });
                     begin({
                         username,
                         userId: results.insertId
